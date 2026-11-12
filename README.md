@@ -142,7 +142,45 @@ Do not commit the `.env` file or any API keys.
 
 The classroom project provides Docker, Makefile, Airflow, and frontend commands. See the original setup guide below for environment-specific startup instructions.
 
-After starting the services, open the Lab Loop frontend, select `merged_latest.csv` and `is_fraud`, set target F1 to `0.5`, and use a budget of `3` experiments.
+### Run Part 1 (Airflow + PostgreSQL)
+
+From the root of **this repository**, run:
+
+```bash
+cp .env.example .env  # only if .env is not already present
+make airflow
+```
+
+The Docker Compose initializes the Airflow metadata database, but **does not automatically create** the separate `week11_ml` database used by the student DAG. Create it once, after the `airflow-db` container is healthy:
+
+```bash
+docker compose -f infra/docker-compose.yml --profile airflow exec airflow-db \
+  psql -U airflow -d airflow -tc "SELECT 1 FROM pg_database WHERE datname='week11_ml';"
+```
+
+If the command outputs `1`, the database already exists. Otherwise, create it:
+
+```bash
+docker compose -f infra/docker-compose.yml --profile airflow exec airflow-db \
+  psql -U airflow -d airflow -c "CREATE DATABASE week11_ml;"
+```
+
+Then open `http://localhost:8088`, log in with the configured Airflow credentials (classroom default: `admin` / `admin`), unpause `lab_baseline_prep`, and trigger the DAG. Its schedule is `@daily`, with `catchup=False`. The pipeline has parallel cleaning, a PostgreSQL load/read-back, ML baseline analysis, and a published CSV at `datasets/airflow/merged_latest.csv`.
+
+Verify the database result:
+
+```bash
+docker compose -f infra/docker-compose.yml --profile airflow exec airflow-db \
+  psql -U airflow -d week11_ml -c "SELECT COUNT(*) FROM cleaned_transactions;"
+```
+
+### Run Part 2 (modified LangGraph Lab Loop)
+
+With Docker services and the frontend running (`make start-mac` on macOS or `make start-windows` on Windows), open `http://localhost:5173/lab-loop`, refresh the graph, select `merged_latest.csv` and `is_fraud`, set target F1 to `0.5`, and use a budget of `3` experiments. The committed sample is also available at `datasets/merged_latest.csv`.
+
+**Vite proxy note:** `frontend/vite.config.ts` currently targets `http://[::1]:8000` to avoid an unrelated service conflict on the development Mac. If the Gateway listens only on IPv4 on another machine, set its proxy `target` to `http://127.0.0.1:8000` and restart Vite.
+
+**Scope:** Part 1 and Part 2 are implemented. The optional Part 3 adaptive multi-agent bonus and comparative evaluation suite are not claimed here.
 
 ## Conclusion
 
@@ -156,7 +194,7 @@ The workflow executed successfully. Predictive performance remains limited, emph
 
 # AutoML Research Lab: Student Setup
 
-Classroom demo in two parts. Start in **`lab/`**; peek at **`solution/`** when revealed; ignore **`advanced/`** until later.
+The following text preserves the instructor's original classroom instructions. For this submitted assignment, follow the **Part 1 and Part 2 reproduction steps above**, including PostgreSQL initialization and the modified Lab Loop. Start in **`lab/`**; `solution/` is reference material and `advanced/` is outside the required scope.
 
 ```
 lab/          student stubs (Airflow DAGs + LangGraph)
@@ -190,8 +228,8 @@ Do not install Airflow on the host. It runs only in Docker.
 ## One-time: clone and env
 
 ```bash
-git clone https://github.com/Kedar-V/automl-research-lab.git
-cd automl-research-lab
+git clone https://github.com/hanhan572/ids706-week11-orchestration.git
+cd ids706-week11-orchestration
 ```
 
 ```bash
@@ -375,7 +413,7 @@ Then open [http://127.0.0.1:5173/solution-loop](http://127.0.0.1:5173/solution-l
 - After Section 1: dataset `merged_latest.csv`, target `is_fraud`
 - Without Airflow: e.g. `Titanic-Dataset.csv`, target `Survived`
 
-![Simple research loop UI with merged_latest.csv and live agent graph](docs/images/solution-loop.jpg)
+![Simple research loop UI](docs/images/simple-loop.jpg)
 
 **Optional checks**
 
